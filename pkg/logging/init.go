@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"pkg/encoding/toml"
+	"github.com/pelletier/go-toml"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
