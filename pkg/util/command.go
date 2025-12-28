@@ -2,12 +2,12 @@ package util
 
 import (
 	"context"
+	"gin-admin/pkg/logging"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"go.uber.org/zap"
-	"pkg/logging"
 )
 
 import (
