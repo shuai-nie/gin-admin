@@ -11,7 +11,7 @@ import (
 type Auther interface {
 	GenerateToken(ctx context.Context, subject string) (TokenInfo, error)
 	DestroyToken(ctx context.Context, tokenStr string) error
-	ParseToken(ctx context.Context, tokenStr string) (string, error)
+	ParseSubject(ctx context.Context, tokenStr string) (string, error)
 	Release(ctx context.Context) error
 }
 
@@ -160,7 +160,7 @@ func (a *JWTAuther) ParseSubject(ctx context.Context, tokenStr string) (string, 
 	err = a.callStore(func(store Storer) error {
 		if exists, err := store.Check(ctx, tokenStr); err != nil {
 			return err
-		} else if !exists {
+		} else if exists {
 			return ErrInvalidToken
 		}
 		return nil
