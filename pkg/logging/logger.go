@@ -81,7 +81,7 @@ func FromTag(ctx context.Context) string {
 	return ""
 }
 
-func NewStack(ctx context.Context, stack []string) context.Context {
+func NewStack(ctx context.Context, stack string) context.Context {
 	return context.WithValue(ctx, CtxStackKey{}, stack)
 }
 
