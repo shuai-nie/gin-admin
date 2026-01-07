@@ -30,8 +30,8 @@ func Logger() gin.HandlerFunc {
 
 func LoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !AllowedPathfixes(c, config.AllowedPathPrefixes...) ||
-			SkippedPathfixes(c, config.SkippedPathPrefixes...) {
+		if !AllowedPathPrefixes(c, config.AllowedPathPrefixes...) ||
+			SkippedPathPrefixes(c, config.SkippedPathPrefixes...) {
 			c.Next()
 			return
 		}
