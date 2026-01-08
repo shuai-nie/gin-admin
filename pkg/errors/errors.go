@@ -180,6 +180,18 @@ func InternalServiceError(id, format string, a ...interface{}) error {
 	}
 }
 
+func InternalServerError(id, format string, a ...interface{}) error {
+	if id == "" {
+		id = DefaultInternalServerErrorID
+	}
+	return &Error{
+		ID:     id,
+		Code:   http.StatusInternalServerError,
+		Detail: fmt.Sprintf(format, a...),
+		Status: http.StatusText(http.StatusInternalServerError),
+	}
+}
+
 func Equal(err1 error, err2 error) bool {
 	verr1, ok1 := err1.(*Error)
 	verr2, ok2 := err2.(*Error)

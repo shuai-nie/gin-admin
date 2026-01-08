@@ -32,7 +32,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) gin.HandlerFunc {
 		return Empty()
 	}
 
-	var store RateLimiterConfig
+	var store RateLimiterStorer
 	switch config.StoreType {
 	case "redis":
 		store = NewRateLimiterRedisStore(config.RedisStoreConfig)
@@ -60,12 +60,12 @@ func RateLimiterWithConfig(config RateLimiterConfig) gin.HandlerFunc {
 		}
 
 		if err != nil {
-			logging.Context(ctx).Error("rate limiter error", zap.Error(err))
-			util.ResError(c, errors.InternalServiceError("", "internal server error, please try again later."))
+			logging.Context(ctx).Error("Rate limiter middleware error", zap.Error(err))
+			util.ResError(c, errors.InternalServerError("", "Internal server error, please try again later."))
 		} else if allowed {
 			c.Next()
 		} else {
-			util.ResError(c, errors.TooManyRequests("", "too many requests"))
+			util.ResError(c, errors.TooManyRequests("", "Too many requests, please try again later."))
 		}
 	}
 }
@@ -103,6 +103,7 @@ func (s *RateLimiterMemoryStore) Allow(ctx context.Context, identifier string, p
 	limiter := rate.NewLimiter(rate.Every(period), maxRequests)
 	limiter.Allow()
 	s.cache.SetDefault(identifier, limiter)
+
 	return true, nil
 }
 
@@ -120,6 +121,7 @@ func NewRateLimiterRedisStore(config RateLimiterRedisConfig) RateLimiterStorer {
 		Password: config.Password,
 		DB:       config.DB,
 	})
+
 	return &RateLimiterRedisStore{
 		limiter: redis_rate.NewLimiter(rdb),
 	}
@@ -129,15 +131,14 @@ type RateLimiterRedisStore struct {
 	limiter *redis_rate.Limiter
 }
 
-func (s *RateLimiterRedisStore) Allow(ctx context.Context, identifier string, period time.Duration, maxRequest int) (bool, error) {
-	if period.Seconds() <= 0 || maxRequest <= 0 {
+func (s *RateLimiterRedisStore) Allow(ctx context.Context, identifier string, period time.Duration, maxRequests int) (bool, error) {
+	if period.Seconds() <= 0 || maxRequests <= 0 {
 		return true, nil
 	}
 
-	result, err := s.limiter.Allow(ctx, identifier, redis_rate.PerSecond(maxRequest/int(period.Seconds())))
+	result, err := s.limiter.Allow(ctx, identifier, redis_rate.PerSecond(maxRequests/int(period.Seconds())))
 	if err != nil {
 		return false, err
 	}
-
 	return result.Allowed > 0, nil
 }
