@@ -54,7 +54,7 @@ func (c *MinioClient) PutObject(ctx context.Context, bucketName, objectName stri
 		bucketName = c.config.BucketName
 	}
 
-	var opt PutobjectOptions
+	var opt PutObjectOptions
 	if len(options) > 0 {
 		opt = options[0]
 	}
@@ -130,8 +130,8 @@ func (c *MinioClient) StatObject(ctx context.Context, bucketName, objectName str
 	return &ObjectStat{
 		Key:          info.Key,
 		Size:         info.Size,
-		ETag:         info.ETag,
-		ContentType:  info.ContentType,
+		Etag:         info.ETag,
+		ContextType:  info.ContentType,
 		UserMetadata: info.UserMetadata,
 	}, nil
 }
