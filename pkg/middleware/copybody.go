@@ -27,8 +27,8 @@ func CopyBody() gin.HandlerFunc {
 
 func CopyBodyWithConfig(config CopyBodyConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !AllowedPathfixes(c, config.AllowedPathPrefixes...) ||
-			SkippedPathfixes(c, config.SkippedPathPrefixes...) ||
+		if !AllowedPathPrefixes(c, config.AllowedPathPrefixes...) ||
+			SkippedPathPrefixes(c, config.SkippedPathPrefixes...) ||
 			c.Request.Body == nil {
 			c.Next()
 			return
@@ -64,4 +64,5 @@ func CopyBodyWithConfig(config CopyBodyConfig) gin.HandlerFunc {
 		c.Next()
 
 	}
+
 }
