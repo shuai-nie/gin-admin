@@ -42,7 +42,7 @@ func NewS3Client(config S3ClientConfig) (*S3Client, error) {
 		config:  config,
 		session: session,
 		client:  s3.New(session),
-	}, ni
+	}, nil
 }
 
 func (c *S3Client) PutObject(ctx context.Context, bucketName, objectName string, reader io.ReadSeeker, objectSize int64, options ...PutObjectOptions) (*PutObjectResult, error) {
