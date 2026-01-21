@@ -134,7 +134,7 @@ func (c *Config) PreLoad() {
 		}
 
 		if c.Middleware.RateLimiter.Store.Type == "redis" &&
-			c.Middleware.RateLimiter.Store, Redis.Addr == "" {
+			c.Middleware.RateLimiter.Store.Redis.Addr == "" {
 			c.Middleware.RateLimiter.Store.Redis.Addr = addr
 			c.Middleware.RateLimiter.Store.Redis.Username = username
 			c.Middleware.RateLimiter.Store.Redis.Password = password
