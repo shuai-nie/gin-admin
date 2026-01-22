@@ -33,7 +33,7 @@ type Menu struct {
 	Status      string
 	ParentID    string
 	ParentPath  string
-	Children    *Menu
+	Children    *Menus
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	Resources   MenuResources
@@ -45,15 +45,15 @@ func (a *Menu) TableName() string {
 
 type MenuQueryParam struct {
 	util.PaginationParam
-	CodePath         string
-	LikeName         string
-	IncludeResources bool
-	InIDs            []string
-	Status           string
-	ParentID         string
-	ParentPathPrefix string
-	UserID           string
-	RoleID           string
+	CodePath         string   `form:"code"`
+	LikeName         string   `form:"name"`
+	IncludeResources bool     `form:"includeResources"`
+	InIDs            []string `form:"-"`
+	Status           string   `form:"-"`
+	ParentID         string   `form:"-"`
+	ParentPathPrefix string   `form:"-"`
+	UserID           string   `form:"-"`
+	RoleID           string   `form:"-"`
 }
 
 type MenuQueryOptions struct {
