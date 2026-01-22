@@ -2,7 +2,9 @@ package dal
 
 import (
 	"context"
+	"fmt"
 	"gin-admin/internal/mods/rbac/schema"
+	"gin-admin/pkg/errors"
 	"gin-admin/pkg/util"
 
 	"gorm.io/gorm"
@@ -10,4 +12,55 @@ import (
 
 func GetLoggerDB(ctx context.Context, defDB *gorm.DB) *gorm.DB {
 	return util.GetDB(ctx, defDB).Model(new(schema.Logger))
+}
+
+type Logger struct {
+	DB *gorm.DB
+}
+
+func (a *Logger) Query(ctx context.Context, params schema.LoggerQueryParam, opts ...schema.LoggerQueryOptions) (*schema.LoggerQueryResult, error) {
+	var opt schema.LoggerQueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	db := a.DB.Table(fmt.Sprintf("%s AS a", new(schema.Logger).TableName()))
+	db = db.Joins(fmt.Sprintf("left join %s b on a.user_id=b.id", new(schema.User).TableName()))
+	db = db.Select("a.*,b.name as user_name,b.username as login_name")
+
+	if v := params.Level; v != "" {
+		db = db.Where("a.level=?", v)
+	}
+
+	if v := params.LikeMessage; v != "" {
+		db = db.Where("a.message like ?", "%"+v+"%")
+	}
+
+	if v := params.TraceID; v != "" {
+		db = db.Where("a.trace_id=?", v)
+	}
+	if v := params.LikeUserName; v != "" {
+		db = db.Where("b.name like ?", "%"+v+"%")
+	}
+
+	if v := params.Tag; v != "" {
+		db = db.Where("a.tag=?", v)
+	}
+
+	if start, end := params.StartTime, params.EndTime; start != "" && end != "" {
+		db = db.Where("a.created_at between ? and ?", start, end)
+	}
+
+	var list schema.Loggers
+
+	pageResult, err := util.WrapPageQuery(ctx, db, params.PaginationParam, opt.QueryOptions, &list)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	queryResult := schema.LoggerQueryResult{
+		PageResult: pageResult,
+		Data:       list,
+	}
+	return &queryResult, nil
+
 }

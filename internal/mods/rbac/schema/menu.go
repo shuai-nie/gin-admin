@@ -61,7 +61,7 @@ type MenuQueryOptions struct {
 }
 
 type MenuQueryResult struct {
-	Data       Menu
+	Data       Menus
 	PageResult *util.PaginationResult
 }
 

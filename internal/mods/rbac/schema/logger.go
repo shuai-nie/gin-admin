@@ -40,8 +40,8 @@ type LoggerQueryOptions struct {
 }
 
 type LoggerQueryResult struct {
-	Data       Logger
-	PageResult util.PaginationResult
+	Data       Loggers
+	PageResult *util.PaginationResult
 }
 
 type Loggers []*Logger
