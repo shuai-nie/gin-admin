@@ -42,7 +42,7 @@ type RoleQueryOptions struct {
 }
 
 type RoleQueryResult struct {
-	Data       Role
+	Data       Roles
 	PageResult *util.PaginationResult
 }
 
