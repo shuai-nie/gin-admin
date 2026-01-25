@@ -1,0 +1,313 @@
+package biz
+
+import (
+	"context"
+	"gin-admin/internal/mods/rbac/dal"
+	"gin-admin/internal/mods/rbac/schema"
+	"gin-admin/pkg/cachex"
+	"gin-admin/pkg/errors"
+	"gin-admin/pkg/logging"
+	"gin-admin/pkg/util"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+)
+
+type Menu struct {
+	Cache           cachex.Cacher
+	Trans           *util.Trans
+	MenuDAL         *dal.Menu
+	MenuResourceDAL *dal.MenuResource
+	RoleMenuDAL     *dal.RoleMenu
+}
+
+func (a *Menu) InitFromFile(ctx context.Context, menuFile string) error {
+	f, err := os.ReadFile(menuFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			logging.Context(ctx).Warn("menu file not exists", zap.String("file", menuFile))
+			return nil
+		}
+		return err
+	}
+
+	var menus schema.Menus
+	if ext := filepath.Ext(menuFile); ext == ".json" {
+		if err := yaml.Unmarshal(f, &menus); err != nil {
+			return err
+		}
+	} else if ext == ".yaml" || ext == ".yml" {
+		if err := yaml.Unmarshal(f, &menus); err != nil {
+			return errors.Wrapf(err, "unmarshal YAML file %s failed", menuFile)
+		}
+	} else {
+		return errors.Errorf("unsupported menu file format %s", ext)
+	}
+
+	return a.Trans.Exec(ctx, func(ctx context.Context) error {
+		return a.createInBatchByParent(ctx, menus, nil)
+	})
+}
+
+func (a *Menu) createInBatchByParent(ctx context.Context, items schema.Menus, parent *schema.Menu) error {
+	total := len(items)
+
+	for i, item := range items {
+		var parentID string
+		if parent != nil {
+			parentID = parent.ID
+		}
+
+		var (
+			menuItem *schema.Menu
+			err      error
+		)
+
+		if item.ID != "" {
+			menuItem, err = a.MenuDAL.Get(ctx, item.ID)
+		} else if item.Code != "" {
+			menuItem, err = a.MenuDAL.GetByCodeAndParentID(ctx, item.Code, parentID)
+		} else if item.Name != "" {
+			menuItem, err = a.MenuDAL.GetByNameAndParentID(ctx, item.Name, parentID)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		if item.Status == "" {
+			item.Status = schema.MenuStatusEnabled
+		}
+
+		if menuItem != nil {
+			changed := false
+			if menuItem.Name != item.Name {
+				menuItem.Name = item.Name
+				changed = true
+			}
+			if menuItem.Description != item.Description {
+				menuItem.Description = item.Description
+				changed = true
+			}
+
+			if menuItem.Path != item.Path {
+				menuItem.Path = item.Path
+				changed = true
+			}
+
+			if menuItem.Type != item.Type {
+				menuItem.Type = item.Type
+				changed = true
+			}
+
+			if menuItem.Sequence != item.Sequence {
+				menuItem.Sequence = item.Sequence
+				changed = true
+			}
+
+			if menuItem.Status != item.Status {
+				menuItem.Status = item.Status
+				changed = true
+			}
+
+			if changed {
+				menuItem.UpdatedAt = time.Now()
+				if err := a.MenuDAL.Update(ctx, menuItem); err != nil {
+					return err
+				}
+			}
+		} else {
+			if item.ID == "" {
+				item.ID = util.NewXID()
+			}
+			if item.Sequence == 0 {
+				item.Sequence = total - i
+			}
+			item.ParentID = parentID
+			if parent != nil {
+				item.ParentPath = parent.ParentPath + parentID + util.TreePathDelimiter
+			}
+			menuItem = item
+			if err := a.MenuDAL.Create(ctx, item); err != nil {
+				return err
+			}
+		}
+
+		for _, res := range item.Resources {
+			if res.ID != "" {
+				exists, err := a.MenuResourceDAL.Exists(ctx, res.ID)
+				if err != nil {
+					return err
+				} else if exists {
+					continue
+				}
+			}
+
+			if res.Path != "" {
+				exists, err := a.MenuResourceDAL.ExistsMethodPathByMenuID(ctx, res.Method, res.Path, menuItem.ID)
+				if err != nil {
+					return err
+				} else if exists {
+					continue
+				}
+			}
+
+			if res.ID == "" {
+				res.ID = util.NewXID()
+			}
+
+			res.MenuID = menuItem.ID
+			if err := a.MenuResourceDAL.Create(ctx, res); err != nil {
+				return err
+			}
+		}
+		if item.Children != nil {
+			if err := a.createInBatchByParent(ctx, *item.Children, menuItem); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (a *Menu) Query(ctx context.Context, params schema.MenuQueryParam) (*schema.MenuQueryResult, error) {
+	params.Pagination = false
+
+	if err := a.fillQueryParam(ctx, &params); err != nil {
+		return nil, err
+	}
+
+	result, err := a.MenuDAL.Query(ctx, params, schema.MenuQueryOptions{
+		QueryOptions: util.QueryOptions{
+			OrderFields: schema.MenusOrderParams,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if params.LikeName != "" || params.CodePath != "" {
+		result.Data, err = a.appendChildren(ctx, result.Data)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if params.IncludeResources {
+		for i, item := range result.Data {
+			resResult, err := a.MenuResourceDAL.Query(ctx, schema.MenuResourceQueryParam{
+				MenuID: item.ID,
+			})
+			if err != nil {
+				return nil, err
+			}
+			result.Data[i].Resources = resResult.Data
+		}
+	}
+	result.Data = result.Data.ToTree()
+	return result, nil
+}
+
+func (a *Menu) fillQueryParam(ctx context.Context, params *schema.MenuQueryParam) error {
+	if params.CodePath != "" {
+		var (
+			codes    []string
+			lastMenu schema.Menu
+		)
+		for _, code := range strings.Split(params.CodePath, util.TreePathDelimiter) {
+			if code == "" {
+				continue
+			}
+			codes = append(codes, code)
+			menu, err := a.MenuDAL.GetByCodeAndParentID(ctx, code, lastMenu.ParentID, schema.MenuQueryOptions{
+				QueryOptions: util.QueryOptions{
+					SelectFields: []string{"id", "parent_path", "parent_id"},
+				},
+			})
+			if err != nil {
+				return err
+			} else if menu == nil {
+				return errors.NotFound("", "Menu %s not exists", strings.Join(codes, util.TreePathDelimiter))
+			}
+			lastMenu = *menu
+		}
+		params.ParentPathPrefix = lastMenu.ParentPath + lastMenu.ID + util.TreePathDelimiter
+	}
+	return nil
+}
+
+func (a *Menu) appendChildren(ctx context.Context, data schema.Menus) (schema.Menus, error) {
+	if len(data) == 0 {
+		return data, nil
+	}
+
+	existsInData := func(id string) bool {
+		for _, item := range data {
+			if item.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, item := range data {
+		childResult, err := a.MenuDAL.Query(ctx, schema.MenuQueryParam{
+			ParentPathPrefix: item.ParentPath + item.ID + util.TreePathDelimiter,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, child := range childResult.Data {
+			if existsInData(child.ID) {
+				continue
+			}
+			data = append(data, child)
+		}
+	}
+
+	if parentIDs := data.SplitParentIDs(); len(parentIDs) > 0 {
+		parentResult, err := a.MenuDAL.Query(ctx, schema.MenuQueryParam{
+			InIDs: parentIDs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range parentResult.Data {
+			if existsInData(p.ID) {
+				continue
+			}
+			data = append(data, p)
+		}
+	}
+	sort.Sort(data)
+	return data, nil
+}
+
+func (a *Menu) Get(ctx context.Context, id string) (*schema.Menu, error) {
+	menu, err := a.MenuDAL.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	} else if menu == nil {
+		return nil, errors.NotFound("", "Menu %s not exists")
+	}
+
+	menuResResult, err := a.MenuResourceDAL.Query(ctx, schema.MenuResourceQueryParam{
+		MenuID: menu.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	menu.Resources = menuResResult.Data
+	return menu, nil
+}
+
+func (a *Menu) Create(ctx context.Context, formItem *schema.MenuForm) (*schema.Menu, error) {
+	
+}

@@ -66,3 +66,92 @@ func (a *Menu) Query(ctx context.Context, params schema.MenuQueryParam, opts ...
 	}
 	return &queryResult, nil
 }
+
+func (a *Menu) Get(ctx context.Context, id string, opts ...schema.MenuQueryOptions) (*schema.Menu, error) {
+	var opt schema.MenuQueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	item := new(schema.Menu)
+	ok, err := util.FindOne(ctx, GetMenuDB(ctx, a.DB).Where("id=?", id), opt.QueryOptions, item)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	} else if !ok {
+		return nil, nil
+	}
+	return item, nil
+}
+
+func (a *Menu) GetByCodeAndParentID(ctx context.Context, code, parentID string, opts ...schema.MenuQueryOptions) (*schema.Menu, error) {
+	var opt schema.MenuQueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	item := new(schema.Menu)
+	ok, err := util.FindOne(ctx, GetMenuDB(ctx, a.DB).Where("code=? and parent_id=?", code, parentID), opt.QueryOptions, item)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	} else if !ok {
+		return nil, nil
+	}
+
+	return item, nil
+}
+
+func (a *Menu) GetByNameAndParentID(ctx context.Context, name, parentID string, opts ...schema.MenuQueryOptions) (*schema.Menu, error) {
+	var opt schema.MenuQueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	item := new(schema.Menu)
+	ok, err := util.FindOne(ctx, GetMenuDB(ctx, a.DB).Where("name=? and parent_id=?", name, parentID), opt.QueryOptions, item)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	} else if !ok {
+		return nil, nil
+	}
+	return item, nil
+}
+
+func (a *Menu) Exists(ctx context.Context, id string) (bool, error) {
+	ok, err := util.Exists(ctx, GetMenuDB(ctx, a.DB).Where("id=?", id))
+	return ok, errors.WithStack(err)
+}
+
+func (a *Menu) ExistsCodeByParentID(ctx context.Context, code, parentID string) (bool, error) {
+	ok, err := util.Exists(ctx, GetMenuDB(ctx, a.DB).Where("code=? and parent_id=?", code, parentID))
+	return ok, errors.WithStack(err)
+}
+
+func (a *Menu) ExistsNameByParentID(ctx context.Context, name, parentID string) (bool, error) {
+	ok, err := util.Exists(ctx, GetMenuDB(ctx, a.DB).Where("name=? and parent_id=?", name, parentID))
+	return ok, errors.WithStack(err)
+}
+
+func (a *Menu) Create(ctx context.Context, item *schema.Menu) error {
+	result := GetMenuDB(ctx, a.DB).Create(item)
+	return errors.WithStack(result.Error)
+}
+
+func (a *Menu) Update(ctx context.Context, item *schema.Menu) error {
+	result := GetMenuDB(ctx, a.DB).Where("id=?", item.ID).Select("*").Omit("created_at").Updates(item)
+	return errors.WithStack(result.Error)
+}
+
+func (a *Menu) Delete(ctx context.Context, id string) error {
+	result := GetMenuDB(ctx, a.DB).Where("id=?", id).Delete(new(schema.Menu))
+	return errors.WithStack(result.Error)
+}
+
+func (a *Menu) UpdateParentPath(ctx context.Context, id, parentPath string) error {
+	result := GetMenuDB(ctx, a.DB).Where("id=?", id).Update("parent_path", parentPath)
+	return errors.WithStack(result.Error)
+}
+
+func (a *Menu) UpdateStatusByParentPath(ctx context.Context, parentPath string, status string) error {
+	result := GetMenuDB(ctx, a.DB).Where("parent_path like ?", parentPath+"%").Update("status", status)
+	return errors.WithStack(result.Error)
+}
