@@ -2,6 +2,8 @@ package biz
 
 import (
 	"context"
+	"fmt"
+	"gin-admin/internal/config"
 	"gin-admin/internal/mods/rbac/dal"
 	"gin-admin/internal/mods/rbac/schema"
 	"gin-admin/pkg/cachex"
@@ -309,5 +311,198 @@ func (a *Menu) Get(ctx context.Context, id string) (*schema.Menu, error) {
 }
 
 func (a *Menu) Create(ctx context.Context, formItem *schema.MenuForm) (*schema.Menu, error) {
-	
+	if config.C.General.DenyOperateMenu {
+		return nil, errors.BadRequest("", "Deny operate menu")
+	}
+
+	menu := &schema.Menu{
+		ID:        util.NewXID(),
+		CreatedAt: time.Now(),
+	}
+
+	if parentID := formItem.ParentID; parentID != "" {
+		parent, err := a.MenuDAL.Get(ctx, parentID)
+		if err != nil {
+			return nil, err
+		} else if parent == nil {
+			return nil, errors.NotFound("", "Parent not found")
+		}
+		menu.ParentPath = parent.ParentPath + parentID + util.TreePathDelimiter
+	}
+	if err := formItem.FillTo(menu); err != nil {
+		return nil, err
+	}
+
+	err := a.Trans.Exec(ctx, func(ctx context.Context) error {
+		if err := a.MenuDAL.Create(ctx, menu); err != nil {
+			return err
+		}
+
+		for _, res := range formItem.Resources {
+			res.ID = util.NewXID()
+			res.MenuID = menu.ID
+			res.CreatedAt = time.Now()
+			if err := a.MenuResourceDAL.Create(ctx, res); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return menu, nil
+}
+
+func (a *Menu) Update(ctx context.Context, id string, formItem *schema.MenuForm) error {
+	if config.C.General.DenyOperateMenu {
+		return errors.BadRequest("", "Deny operate menu")
+	}
+
+	menu, err := a.MenuDAL.Get(ctx, id)
+	if err != nil {
+		return err
+	} else if menu == nil {
+		return errors.NotFound("", "Menu %s not exists")
+	}
+
+	oldParentPath := menu.ParentPath
+	oldStataus := menu.Status
+	var childData schema.Menus
+	if menu.ParentID != formItem.ParentID {
+		if parentID := formItem.ParentID; parentID != "" {
+			parent, err := a.MenuDAL.Get(ctx, parentID)
+			if err != nil {
+				return err
+			} else if parent == nil {
+				return errors.NotFound("", "Parent not found")
+			}
+			menu.ParentPath = parent.ParentPath + parentID + util.TreePathDelimiter
+		} else {
+			menu.ParentPath = ""
+		}
+
+		childResult, err := a.MenuDAL.Query(ctx, schema.MenuQueryParam{
+			ParentPathPrefix: oldParentPath + menu.ID + util.TreePathDelimiter,
+		}, schema.MenuQueryOptions{
+			QueryOptions: util.QueryOptions{
+				OrderFields: schema.MenusOrderParams,
+			},
+		})
+
+		if err != nil {
+			return err
+		}
+
+		childData = childResult.Data
+	}
+
+	if menu.Code != formItem.Code {
+		if exists, err := a.MenuDAL.ExistsCodeByParentID(ctx, formItem.Code, formItem.ParentID); err != nil {
+			return err
+		} else if exists {
+			return errors.BadRequest("", "Code %s already exists", formItem.Code)
+		}
+	}
+
+	if err := formItem.FillTo(menu); err != nil {
+		return err
+	}
+
+	return a.Trans.Exec(ctx, func(ctx context.Context) error {
+		if oldStataus != formItem.Status {
+			oldPath := oldParentPath + menu.ID + util.TreePathDelimiter
+			if err := a.MenuDAL.UpdateStatusByParentPath(ctx, oldPath, formItem.Status); err != nil {
+				return err
+			}
+		}
+		for _, child := range childData {
+			oldPath := oldParentPath + menu.ID + util.TreePathDelimiter
+			newPath := menu.ParentPath + menu.ID + util.TreePathDelimiter
+			err := a.MenuDAL.UpdateParentPath(ctx, child.ID, strings.Replace(child.ParentPath, oldPath, newPath, 1))
+			if err != nil {
+				return err
+			}
+		}
+
+		if err := a.MenuDAL.Update(ctx, menu); err != nil {
+			return err
+		}
+
+		if err := a.MenuResourceDAL.DeleteByMenuID(ctx, id); err != nil {
+			return err
+		}
+
+		for _, res := range formItem.Resources {
+			if res.ID == "" {
+				res.ID = util.NewXID()
+			}
+			res.MenuID = id
+			if res.CreatedAt.IsZero() {
+				res.CreatedAt = time.Now()
+			}
+
+			res.UpdatedAt = time.Now()
+			if err := a.MenuResourceDAL.Create(ctx, res); err != nil {
+				return err
+			}
+		}
+		return a.syncToCasbin(ctx)
+	})
+}
+
+func (a *Menu) Delete(ctx context.Context, id string) error {
+	if config.C.General.DenyOperateMenu {
+		return errors.BadRequest("", "Deny operate menu")
+	}
+
+	menu, err := a.MenuDAL.Get(ctx, id)
+	if err != nil {
+		return err
+	} else if menu == nil {
+		return errors.NotFound("", "Menu %s not exists")
+	}
+
+	childResult, err := a.MenuDAL.Query(ctx, schema.MenuQueryParam{
+		ParentPathPrefix: menu.ParentPath + menu.ID + util.TreePathDelimiter,
+	}, schema.MenuQueryOptions{
+		QueryOptions: util.QueryOptions{
+			SelectFields: []string{"id"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return a.Trans.Exec(ctx, func(ctx context.Context) error {
+		if err := a.delete(ctx, menu.ID); err != nil {
+			return err
+		}
+
+		for _, child := range childResult.Data {
+			if err := a.delete(ctx, child.ID); err != nil {
+				return err
+			}
+		}
+		return a.syncToCasbin(ctx)
+	})
+}
+
+func (a *Menu) delete(ctx context.Context, id string) error {
+	if err := a.MenuDAL.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if err := a.MenuResourceDAL.DeleteByMenuID(ctx, id); err != nil {
+		return err
+	}
+
+	if err := a.RoleMenuDAL.DeleteByMenuID(ctx, id); err != nil {
+		return err
+	}
+	return nil
+}
+func (a *Menu) syncToCasbin(ctx context.Context) error {
+	return a.Cache.Set(ctx, config.CacheNSForRole, config.CacheKeyForSyncToCasbin, fmt.Sprintf("%d", time.Now().Unix()))
 }
