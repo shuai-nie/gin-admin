@@ -2,6 +2,7 @@ package mods
 
 import (
 	"context"
+	"gin-admin/internal/mods/rbac"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
@@ -11,9 +12,10 @@ const (
 	apiPrefix = "/api"
 )
 
-var Set = wire.NewSet{
-	RBAC *rbac.RBAC
-}
+var Set = wire.NewSet(
+	wire.Struct(new(Mods), "*"),
+	rbac.Set,
+)
 
 type Mods struct {
 	RBAC *rbac.RBAC
@@ -32,7 +34,7 @@ func (a *Mods) RouterPrefixes() []string {
 	}
 }
 
-func (a *Mods)RegisterRouters(ctx context.Context, e *gin.Engine) error {
+func (a *Mods) RegisterRouters(ctx context.Context, e *gin.Engine) error {
 	gAPI := e.Group(apiPrefix)
 	v1 := gAPI.Group("v1")
 
@@ -42,7 +44,7 @@ func (a *Mods)RegisterRouters(ctx context.Context, e *gin.Engine) error {
 	return nil
 }
 
-func (a *Mods)Release(ctx context.Context) error {
+func (a *Mods) Release(ctx context.Context) error {
 	if err := a.RBAC.Release(ctx); err != nil {
 		return err
 	}

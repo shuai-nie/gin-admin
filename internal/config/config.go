@@ -67,6 +67,7 @@ type Storage struct {
 		MaxLifetime  int
 		MaxIdleTime  int
 		MaxOpenConns int
+		MaxIdleConns int
 		TablePrefix  string
 		AutoMigrate  bool
 		PrepareStmt  bool
