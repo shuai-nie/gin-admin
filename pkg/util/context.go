@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"gin-admin/pkg/encoding/json"
+
 	"gorm.io/gorm"
 )
 
@@ -61,7 +62,7 @@ func NewUserToken(ctx context.Context, userToken string) context.Context {
 	return context.WithValue(ctx, userTokenCtx{}, userToken)
 }
 
-func FromUserToken(ctx context.Context, userToken string) string {
+func FromUserToken(ctx context.Context) string {
 	v := ctx.Value(userTokenCtx{})
 	if v != nil {
 		return v.(string)

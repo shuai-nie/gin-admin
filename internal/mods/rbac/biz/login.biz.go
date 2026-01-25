@@ -12,6 +12,7 @@ import (
 	"gin-admin/pkg/logging"
 	"gin-admin/pkg/util"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/LyricTian/captcha"
@@ -25,7 +26,7 @@ type Login struct {
 	Auth        jwtx.Auther
 	UserDAL     *dal.User
 	UserRoleDAL *dal.UserRole
-	RoleDAL     *dal.Menu
+	MenuDAL     *dal.Menu
 	UserBIZ     *User
 }
 
@@ -173,7 +174,7 @@ func (a *Login) Login(ctx context.Context, formItem *schema.LoginForm) (*schema.
 
 	ctx = logging.NewUserID(ctx, userID)
 
-	roleIDs, err := a.UserRoleDAL.GetRoleIDs(ctx, userID)
+	roleIDs, err := a.UserBIZ.GetRoleIDs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -306,4 +307,49 @@ func (a *Login) QueryMenus(ctx context.Context) (schema.Menus, error) {
 			OrderFields: schema.MenusOrderParams,
 		},
 	})
+	if err != nil {
+		return nil, err
+	} else if isRoot {
+		return menuResult.Data.ToTree(), nil
+	}
+	if parentIDs := menuResult.Data.SplitParentIDs(); len(parentIDs) > 0 {
+		var missMenusIDs []string
+		menuIDMapper := menuResult.Data.ToMap()
+		for _, parentID := range parentIDs {
+			if _, ok := menuIDMapper[parentID]; !ok {
+				missMenusIDs = append(missMenusIDs, parentID)
+			}
+		}
+		if len(missMenusIDs) > 0 {
+			parentResult, err := a.MenuDAL.Query(ctx, schema.MenuQueryParam{
+				InIDs: missMenusIDs,
+			})
+			if err != nil {
+				return nil, err
+			}
+			menuResult.Data = append(menuResult.Data, parentResult.Data...)
+			sort.Sort(menuResult.Data)
+		}
+	}
+	return menuResult.Data.ToTree(), nil
+}
+
+func (a *Login) UpdateUser(ctx context.Context, updateItem *schema.UpdateCurrentUser) error {
+	if util.FromIsRootUser(ctx) {
+		return errors.BadRequest("", "Root user cannot update user")
+	}
+
+	userID := util.FromUserID(ctx)
+	user, err := a.UserDAL.Get(ctx, userID)
+	if err != nil {
+		return err
+	} else if user == nil {
+		return errors.NotFound("", "Incorrect user")
+	}
+
+	user.Name = updateItem.Name
+	user.Phone = updateItem.Phone
+	user.Email = updateItem.Email
+	user.Remark = updateItem.Remark
+	return a.UserDAL.Update(ctx, user, "name", "phone", "email", "remark")
 }
