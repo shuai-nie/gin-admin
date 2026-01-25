@@ -84,8 +84,8 @@ func (a *Role) Create(ctx context.Context, item *schema.Role) error {
 	return errors.WithStack(result.Error)
 }
 
-func (a *Role) Update(ctx context.Context, id string, item *schema.Role) error {
-	result := GetRoleDB(ctx, a.DB).Where("id=?", id).Updates(item)
+func (a *Role) Update(ctx context.Context, item *schema.Role) error {
+	result := GetRoleDB(ctx, a.DB).Where("id=?", item.ID).Select("*").Omit("created_at").Updates(item)
 	return errors.WithStack(result.Error)
 }
 

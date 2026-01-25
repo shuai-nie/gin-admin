@@ -73,12 +73,12 @@ func (a *UserRole) Exists(ctx context.Context, id string) (bool, error) {
 	return ok, errors.WithStack(err)
 }
 
-func (a *UserRole) Create(ctx context.Context, item schema.UserRole) error {
+func (a *UserRole) Create(ctx context.Context, item *schema.UserRole) error {
 	result := GetUserRoleDB(ctx, a.DB).Create(item)
 	return errors.WithStack(result.Error)
 }
 
-func (a *UserRole) Update(ctx context.Context, id string, item schema.UserRole) error {
+func (a *UserRole) Update(ctx context.Context, id string, item *schema.UserRole) error {
 	result := GetUserRoleDB(ctx, a.DB).Where("id=?", id).Updates(item)
 	return errors.WithStack(result.Error)
 }

@@ -17,7 +17,7 @@ type User struct {
 	DB *gorm.DB
 }
 
-func (a *User) Query(ctx context.Context, params *schema.UserQueryParam, opts ...schema.UserQueryOptions) (*schema.UserQueryResult, error) {
+func (a *User) Query(ctx context.Context, params schema.UserQueryParam, opts ...schema.UserQueryOptions) (*schema.UserQueryResult, error) {
 	var opt schema.UserQueryOptions
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -80,6 +80,11 @@ func (a *User) GetByUsername(ctx context.Context, username string, opts ...schem
 
 func (a *User) Exists(ctx context.Context, id string) (bool, error) {
 	ok, err := util.Exists(ctx, GetUserDB(ctx, a.DB).Where("id=?", id))
+	return ok, errors.WithStack(err)
+}
+
+func (a *User) ExistsUsername(ctx context.Context, username string) (bool, error) {
+	ok, err := util.Exists(ctx, GetUserDB(ctx, a.DB).Where("username=?", username))
 	return ok, errors.WithStack(err)
 }
 
