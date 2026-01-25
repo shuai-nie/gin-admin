@@ -71,12 +71,12 @@ func (a *MenuResource) ExistsMethodPathByMenuID(ctx context.Context, menuID, met
 	return ok, errors.WithStack(err)
 }
 
-func (a *MenuResource) Create(ctx context.Context, item schema.MenuResource) error {
+func (a *MenuResource) Create(ctx context.Context, item *schema.MenuResource) error {
 	result := GetMenuResourceDB(ctx, a.DB).Create(item)
 	return errors.WithStack(result.Error)
 }
 
-func (a *MenuResource) Update(ctx context.Context, id string, item schema.MenuResource) error {
+func (a *MenuResource) Update(ctx context.Context, id string, item *schema.MenuResource) error {
 	result := GetMenuResourceDB(ctx, a.DB).Where("id=?", id).Delete(new(schema.MenuResource))
 	return errors.WithStack(result.Error)
 }
