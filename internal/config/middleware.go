@@ -60,8 +60,8 @@ type Middleware struct {
 		Enable              bool
 		SkippedPathPrefixes []string
 		Period              int
-		MaxRequestPerIP     int
-		MaxRequestPerUser   int
+		MaxRequestsPerIP    int
+		MaxRequestsPerUser  int
 		Store               struct {
 			Type   string
 			Memory struct {

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gin-admin/internal/bootstrap"
+	"gin-admin/internal/config"
 	"github.com/urfave/cli/v2"
-	"internal/bootstrap"
-	"internal/config"
 )
 
 func StartCmd() *cli.Command {

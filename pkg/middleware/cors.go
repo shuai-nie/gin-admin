@@ -9,7 +9,7 @@ import (
 
 type CORSConfig struct {
 	Enable                 bool
-	AllowAllOrigin         bool
+	AllowAllOrigins        bool
 	AllowOrigins           []string
 	AllowMethods           []string
 	AllowHeaders           []string
@@ -33,7 +33,7 @@ func CORSWithConfig(cfg CORSConfig) gin.HandlerFunc {
 	}
 
 	return cors.New(cors.Config{
-		AllowAllOrigins:        cfg.AllowAllOrigin,
+		AllowAllOrigins:        cfg.AllowAllOrigins,
 		AllowOrigins:           cfg.AllowOrigins,
 		AllowMethods:           cfg.AllowMethods,
 		AllowHeaders:           cfg.AllowHeaders,
